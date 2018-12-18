@@ -49,6 +49,14 @@ func TestDefaultFactory_ok(t *testing.T) {
 				},
 			},
 			{
+				Endpoint: "/get",
+				Method:   "POST",
+				Timeout:  10,
+				Backend: []*config.Backend{
+					{},
+				},
+			},
+			{
 				Endpoint: "/post",
 				Method:   "Post",
 				Timeout:  10,
@@ -121,6 +129,17 @@ func TestDefaultFactory_ok(t *testing.T) {
 		if content != expectedBody {
 			t.Error(endpoint.Endpoint, "Unexpected body:", content, "expected:", expectedBody)
 		}
+	}
+
+	req, _ := http.NewRequest("PUT", "http://127.0.0.1:8062/get", nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error("Making the request:", err.Error())
+		return
+	}
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("Unexpected status code for unsupported method. have: %d, want: %d", resp.StatusCode, http.StatusMethodNotAllowed)
 	}
 }
 

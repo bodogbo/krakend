@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/devopsfaith/krakend/config"
 	"github.com/devopsfaith/krakend/core"
@@ -35,15 +34,9 @@ func CustomEndpointHandlerWithHTTPError(rb RequestBuilder, errF router.ToHTTPErr
 		if len(headersToSend) == 0 {
 			headersToSend = router.HeadersToSend
 		}
-		method := strings.ToTitle(configuration.Method)
 
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(core.KrakendHeaderName, core.KrakendHeaderValue)
-			if r.Method != method {
-				w.Header().Set(router.CompleteResponseHeaderName, router.HeaderIncompleteResponseValue)
-				http.Error(w, "", http.StatusMethodNotAllowed)
-				return
-			}
 
 			requestCtx, cancel := context.WithTimeout(context.Background(), configuration.Timeout)
 

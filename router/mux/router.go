@@ -3,6 +3,7 @@ package mux
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -95,6 +96,8 @@ func (r httpRouter) Run(cfg config.ServiceConfig) {
 }
 
 func (r httpRouter) registerKrakendEndpoints(endpoints []*config.EndpointConfig) {
+	uniquePaths := map[string]map[string]http.HandlerFunc{}
+	sortedUniquePaths := []string{}
 	for _, c := range endpoints {
 		proxyStack, err := r.cfg.ProxyFactory.New(c)
 		if err != nil {
@@ -102,15 +105,30 @@ func (r httpRouter) registerKrakendEndpoints(endpoints []*config.EndpointConfig)
 			continue
 		}
 
-		r.registerKrakendEndpoint(c.Method, c.Endpoint, r.cfg.HandlerFactory(c, proxyStack), len(c.Backend))
+		handler := r.cfg.HandlerFactory(c, proxyStack)
+		method := strings.ToTitle(c.Method)
+
+		if err := r.checkKrakendEndpoint(method, c.Endpoint, len(c.Backend)); err != nil {
+			r.cfg.Logger.Error("validating endpoint:", err.Error())
+			continue
+		}
+
+		if _, ok := uniquePaths[c.Endpoint]; !ok {
+			uniquePaths[c.Endpoint] = map[string]http.HandlerFunc{}
+			sortedUniquePaths = append(sortedUniquePaths, c.Endpoint)
+		}
+		uniquePaths[c.Endpoint][method] = handler
+	}
+
+	for _, path := range sortedUniquePaths {
+		r.cfg.Engine.Handle(path, methodDispatcher(uniquePaths[path]))
 	}
 }
 
-func (r httpRouter) registerKrakendEndpoint(method, path string, handler http.HandlerFunc, totBackends int) {
+func (r httpRouter) checkKrakendEndpoint(method, path string, totBackends int) error {
 	method = strings.ToTitle(method)
 	if method != http.MethodGet && totBackends > 1 {
-		r.cfg.Logger.Error(method, "endpoints must have a single backend! Ignoring", path)
-		return
+		return fmt.Errorf("%s endpoints must have a single backend! Ignoring %s", method, path)
 	}
 
 	switch method {
@@ -120,11 +138,11 @@ func (r httpRouter) registerKrakendEndpoint(method, path string, handler http.Ha
 	case http.MethodPatch:
 	case http.MethodDelete:
 	default:
-		r.cfg.Logger.Error("Unsupported method", method)
-		return
+		return fmt.Errorf("Unsupported method %s", method)
 	}
+
 	r.cfg.Logger.Debug("registering the endpoint", method, path)
-	r.cfg.Engine.Handle(path, handler)
+	return nil
 }
 
 func (r httpRouter) handler() http.Handler {
@@ -134,4 +152,16 @@ func (r httpRouter) handler() http.Handler {
 		handler = middleware.Handler(handler)
 	}
 	return handler
+}
+
+func methodDispatcher(handlers map[string]http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if handler, ok := handlers[req.Method]; ok {
+			handler(rw, req)
+			return
+		}
+
+		rw.Header().Set(router.CompleteResponseHeaderName, router.HeaderIncompleteResponseValue)
+		http.Error(rw, "", http.StatusMethodNotAllowed)
+	})
 }

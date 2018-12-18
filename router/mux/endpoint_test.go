@@ -91,11 +91,6 @@ func TestEndpointHandler_noop(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 }
 
-func TestEndpointHandler_badMethod(t *testing.T) {
-	testEndpointHandler(t, 10, proxy.NoopProxy, "PUT", "\n", "", "text/plain; charset=utf-8", http.StatusMethodNotAllowed, false)
-	time.Sleep(5 * time.Millisecond)
-}
-
 func testEndpointHandler(t *testing.T, timeout time.Duration, p proxy.Proxy, method, expectedBody, expectedCache, expectedContent string,
 	expectedStatusCode int, completed bool) {
 	endpoint := &config.EndpointConfig{
